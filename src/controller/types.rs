@@ -4,4 +4,5 @@ use serde::de::{Deserialize};
 #[derive(serde::Deserialize)]
 pub struct CreateCodeRequest {
     pub code: Option<String>,
+    pub file_name: Option<String>,
 }
