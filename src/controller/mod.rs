@@ -6,6 +6,7 @@ use types::CreateCodeRequest;
 use std::path::Path as p;
 use std::fs::File as f;
 use uuid::Uuid;
+use std::env;
 use std::io::{Write};
 use tokio::process::Command;
 
@@ -18,19 +19,34 @@ impl ExecuteController {
         return Self
     }
 
-    // Это доделать надо бы блин
+    // Работает, но вывод принтов не отображается
     pub async fn execute_file(Path(id): Path<String>) -> impl IntoResponse {
-        let path = format!("../{}/{}.c", DIR_PATH.to_string(), &id);
-        println!("{}",format!("gcc {} -o output",  &path));
 
-        let output = Command::new("sh")
-            .arg("-c")
-            .arg(format!("gcc {} -o output",  &path))
+        let work_dir = p::new("static");
+
+        let check_gcc = Command::new("gcc")
+            .current_dir(&work_dir)
+            .arg(format!("{}.c", id))
             .output()
             .await;
-        println!("{:?}", output);
-        return "File execution";
+
+        match check_gcc {
+            Ok(result) => return Json(serde_json::json!(
+                {
+                    "result": "done",
+                    "code_output": String::from_utf8_lossy(&result.stdout),
+                    "code_error": String::from_utf8_lossy(&result.stderr),
+                }
+            )),
+            Err(e) => return  Json(serde_json::json!(
+                {
+                    "result":"error",
+                    "error": e.to_string()
+                }
+            )),
+        }
     }
+
     pub async fn create_file(
         Json(file_data): Json<CreateCodeRequest>
     ) -> Json<serde_json::Value> {
@@ -49,7 +65,7 @@ impl ExecuteController {
         let searching_file_result = Self::check_if_file_exists(file_id).await;
         match searching_file_result {
             Ok(_) => {
-                 let _ = Self::file_generator(file_data.code.unwrap(), Uuid::parse_str(file_id.as_str()).unwrap()).await;
+                let _ = Self::file_generator(file_data.code.unwrap(), Uuid::parse_str(file_id.as_str()).unwrap()).await;
                 return Json(serde_json::json!(
                 {
                     "result":"done",
