@@ -19,18 +19,35 @@ impl ExecuteController {
         return Self
     }
 
-    // Работает, но вывод принтов не отображается
     pub async fn execute_file(Path(id): Path<String>) -> impl IntoResponse {
 
         let work_dir = p::new("static");
 
         let check_gcc = Command::new("gcc")
             .current_dir(&work_dir)
-            .arg(format!("{}.c", id))
+            .arg(format!("{}.c", &id))
+            .arg(format!("-o {}.exe", &id))
             .output()
             .await;
 
-        match check_gcc {
+         match check_gcc {
+            Ok(_) => {},
+            Err(e) => return  Json(serde_json::json!(
+                {
+                    "result":"error",
+                    "error": e.to_string()
+                }
+            )),
+        }
+
+        let exec_output = Command::new("cmd")
+            .current_dir(&work_dir)
+            .arg("/C")
+            .arg(format!(" {}.exe", &id))
+            .output()
+            .await;
+        
+        match exec_output {
             Ok(result) => return Json(serde_json::json!(
                 {
                     "result": "done",
@@ -51,21 +68,22 @@ impl ExecuteController {
         Json(file_data): Json<CreateCodeRequest>
     ) -> Json<serde_json::Value> {
 
-        let file_id: Uuid = Uuid::new_v4();
-        let _ = Self::file_generator(file_data.code.unwrap(), file_id).await;
+        let file_id: String = Uuid::new_v4().to_string() .replace('-', "");
+        let _ = Self::file_generator(file_data.code.unwrap(), &file_id).await;
         return Json(serde_json::json!(
             {
                 "result":"done",
+                "file_name":file_id,
             }
         ));
     }
 
     pub async fn update_file(Json(file_data): Json<CreateCodeRequest>) -> Json<serde_json::Value> {
-        let file_id: &String = &file_data.file_name.unwrap();
+        let file_id: &String = &file_data.file_name.unwrap().replace('-', "");
         let searching_file_result = Self::check_if_file_exists(file_id).await;
         match searching_file_result {
             Ok(_) => {
-                let _ = Self::file_generator(file_data.code.unwrap(), Uuid::parse_str(file_id.as_str()).unwrap()).await;
+                let _ = Self::file_generator(file_data.code.unwrap(), &file_id.to_string()).await;
                 return Json(serde_json::json!(
                 {
                     "result":"done",
@@ -81,7 +99,7 @@ impl ExecuteController {
         }
     }
 
-    async fn file_generator(code: String, uid: Uuid) -> Result<(), std::io::Error> {
+    async fn file_generator(code: String, uid: &String) -> Result<(), std::io::Error> {
         let dir_path = DIR_PATH;
 
         if !p::new(dir_path).exists() {
