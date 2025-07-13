@@ -19,7 +19,7 @@ impl ExecuteController {
         return Self
     }
 
-    pub async fn execute_file(Path(id): Path<String>) -> impl IntoResponse {
+    pub async fn execute_file(Path(id): Path<String>) -> Json<serde_json::Value> {
 
         let work_dir = p::new("static");
 
@@ -29,9 +29,18 @@ impl ExecuteController {
             .arg(format!("-o {}.exe", &id))
             .output()
             .await;
-
+        println!("{:?}", check_gcc);
          match check_gcc {
-            Ok(_) => {},
+            Ok(compile_result) => {
+                if compile_result.stderr.len() > 0 {
+                    return  Json(serde_json::json!(
+                        {
+                            "result":"error",
+                            "code_error": String::from_utf8_lossy(&compile_result.stderr)
+                        }
+                    ))    
+                }
+            },
             Err(e) => return  Json(serde_json::json!(
                 {
                     "result":"error",
