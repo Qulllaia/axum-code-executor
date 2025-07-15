@@ -1,8 +1,12 @@
 .code-area {
     width: 100%;
+    max-width: 1520px;
     height: 70vh; 
     text-align: left;
     display: flex;
+    overflow: auto;
+    outline: none;
+    border: none;
 }
 
 textarea:focus {
@@ -17,7 +21,6 @@ textarea:focus {
     margin-bottom: auto;
     width: 100%;
     height: 100vh; 
-
     display: flex;
     flex-direction:row;
 }
@@ -38,18 +41,21 @@ textarea:focus {
     flex: 0 0 30%; 
     align-items: center; 
     margin-left: auto;
-    min-height: 100vh; 
     padding: 20px;
+    display: flex;
+    height: 100vh;
     box-sizing: border-box;
 }
 
 .work-spaces {
     border-radius: 10px;
-
+    padding: 20px;
+    flex: 1; 
+    min-height: calc(100% - 5px);
     width: 100%;
     min-width: 100px;
-    height: 70vh; 
-    background-color: brown;
+    /* height: 100vh;  */
+    background-color:  #23262e;
 }
 
 .output-container {
@@ -57,16 +63,19 @@ textarea:focus {
     flex: 0 0 30%; 
     height: 100vh;
     width: 100%;
-    background-color: #1F1D23;
+    background-color: #1f1d238c;
     outline: none;
+    border: none;
+    border-radius: 10px;
     color: #A29A8A;
     font-size: 2rem;
+    resize: none; 
 }
 
 .control-panel {
     border-radius: 10px;
     flex: 0 0 10%; 
-    background-color:#1F1D23;
+    background-color:#1f1d238c;
     height: 100px;
     margin-bottom: 0.5rem;
     display: flex;
@@ -82,5 +91,33 @@ textarea:focus {
     font-size: 2rem;
     background-color: #1F1D23;
     color: #888397;
+}
 
+ul {
+    padding: 0;
+    margin-left: 20px;
+    margin-right: 20px;
+    display: flex;
+    align-items: center;
+    flex-direction: column;
+}
+
+li {
+    width: 100%;
+    height: 35px;
+    margin-bottom: 0.5rem;
+    display: flex;
+    cursor: pointer;
+    padding: 0.5em;
+    position: relative;
+    color: white;
+    border-radius: 10px;
+    background: #1f1d238c;
+    transition: all 0.5s ease;
+    box-shadow: inset 0 0 0 0 #494553;
+    font-family: "Cascadia Code";
+}
+
+li:hover {
+    box-shadow: inset 200px 0 0 0 #494553;
 }

@@ -2,7 +2,7 @@ mod router;
 mod controller;
 use axum::{Router};
 use axum::http::{Method, header, HeaderValue};
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::{CorsLayer};
 use crate::router::ExecuteRouter;
 
 #[tokio::main]
@@ -20,6 +20,7 @@ async fn main() {
     println!("Server is running on address {:?}", addr);
     let router = Router::new();
     axum::serve(listener, ExecuteRouter::new(router)
-        .layer(cors)).await.unwrap();
+        .layer(cors)
+        ).await.unwrap();
 }
 
