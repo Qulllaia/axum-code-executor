@@ -4,38 +4,63 @@ import { andromeda } from '@uiw/codemirror-theme-andromeda';
 import { cpp } from '@codemirror/lang-cpp';
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
+import { Workspace } from '../../types/types';
 export const CodeExetutorInput = () => {
     const [text, setText] = useState('');
     const [currentWorkspace, setCurrentWorkspace] = useState<number>(0);
     const [code, setCode] = useState('#include <stdio.h> int main() { printf("Hello World"); return 0; }');
     const [workspace, setWorkspace] = useState<String[]>(['23a629528f0e4437', '490e2609752840']);
+    const [userId, setUserId] = useState<number>(1);
+    const [workspaceList, setWorkspaceList] = useState< Workspace[]>([]);
+
+    const currentCode = workspaceList[currentWorkspace]?.code || '';
 
     const executeCode = async () => {
-    let response;
-    let file;
+        let response;
+        let file;
         if(!workspace){
             response = await axios.post('http://127.0.1.1:5000/create_file', {
-                    code: code    
+                    code: currentCode    
                 }
             )
             file = response.data.file_name.toString();
             setWorkspace([...workspace, file])
         }else{
             response = await axios.patch('http://127.0.1.1:5000/update_file', {
-                file_name: workspace[currentWorkspace],
-                code: code
+                file_name: workspaceList[currentWorkspace].workspace_uid,
+                code: currentCode
             }
         )
         }
 
         if(response.request.status === 200 && workspace.length){
-            const exec_response = await axios.get(`http://127.0.1.1:5000/execute_file/${workspace[currentWorkspace]}`)
+            console.log(currentWorkspace);
+            const exec_response = await axios.get(`http://127.0.1.1:5000/execute_file/${workspaceList[currentWorkspace].workspace_uid}`)
             const newText = exec_response.data.code_output + exec_response.data.code_error;
             setText(newText);
         }
     }
 
+    const fetchData = async () => {
+        const response = await axios.get(`http://127.0.1.1:5000/get_files/${userId}`)
+        const wl = response.data?.row.map((item: Workspace) => {
+            return {
+                code: item.code, 
+                user_id: item.user_id, 
+                workspace_name: item.workspace_name,
+                workspace_uid: item.workspace_uid,
+            } as Workspace
+        }) 
+        console.log(wl);
+        setWorkspaceList(wl);
+        console.log(workspaceList);
+
+    } 
+
     useEffect(()=>{
+        if(!workspaceList.length)
+            fetchData();
+
         for(let i = 0; i < workspace.length; i++) {
             const element = document.getElementById(i.toString());
             if (element) {
@@ -70,8 +95,14 @@ export const CodeExetutorInput = () => {
                     basicSetup={{
                         highlightActiveLine: true,
                     }}    
-                    value={code}
-                    onChange={(e)=> setCode(e)}
+                    value={currentCode as string}  
+                    onChange={(value) => {
+                        const updatedList = [...workspaceList];
+                        if (updatedList[currentWorkspace]) {
+                            updatedList[currentWorkspace].code = value;
+                            setWorkspaceList(updatedList);
+                        }
+                    }}
                     />
                 <textarea className='output-container'
                     value={text}
@@ -84,12 +115,12 @@ export const CodeExetutorInput = () => {
                     </div>
                         <div className="list-container">
                             <ul>
-                                {workspace.map((workspace, index)=> {
+                                {workspaceList.map((workspace, index)=> {
                                     return (
                                         <li 
                                             id={index.toString()} 
                                             onClick={()=>setCurrentWorkspace(index)
-                                        }>{workspace}</li>
+                                        }>{workspace.workspace_name}</li>
                                     )
                                 }) }
                             </ul>
