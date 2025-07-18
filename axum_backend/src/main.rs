@@ -1,9 +1,12 @@
 mod router;
 mod controller;
 mod db;
+use std::sync::Arc;
+
 use db::connector;
 use axum::{Router};
 use axum::http::{Method, header, HeaderValue};
+use deadpool_postgres::{Manager, Object};
 use tower_http::cors::{CorsLayer};
 use crate::router::ExecuteRouter;
 
@@ -30,7 +33,7 @@ async fn main() {
         }
     }
 
-    let router = Router::new();
+    let router: Router<Arc<Object>> = Router::new();
     axum::serve(listener, ExecuteRouter::new(router, database_connection)
         .layer(cors)
         ).await.unwrap();

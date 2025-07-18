@@ -1,19 +1,37 @@
 use deadpool_postgres::{Config, ManagerConfig, Object, RecyclingMethod, Runtime};
 use tokio_postgres::NoTls;
+use dotenv::dotenv;
+use std::env;
 
 pub async fn connector() ->  Result<Object, Box<dyn std::error::Error>>  {
-    let mut cfg = Config::new();
-    cfg.host = Some("localhost".to_string());
-    cfg.port = Some(5432);
-    cfg.user = Some("postgres".to_string());
-    cfg.password = Some("qulllaia".to_string());
-    cfg.dbname = Some("code_executor".to_string());
-    
-    cfg.manager = Some(ManagerConfig {
-        recycling_method: RecyclingMethod::Fast,
-    });
-    
-    let pool = cfg.create_pool(Some(Runtime::Tokio1), NoTls)?;
+    dotenv().ok();
 
-    Ok(pool.get().await?)
+    let host = env::var("HOST");
+    let port = env::var("PORT");
+    let user = env::var("USER"); 
+    let password = env::var("PASSWORD");
+    let dbname = env::var("DBNAME");
+
+    match (host, port, user, password, dbname) {
+        (Ok(host), Ok(port), Ok(user), Ok(password), Ok(dbname)) => {
+            let mut cfg = Config::new();
+
+            let mut cfg = Config::new();
+            cfg.host = Some(host);
+            cfg.port = Some(port.parse::<u16>().unwrap());
+            cfg.user = Some(user);
+            cfg.password = Some(password);
+            cfg.dbname = Some(dbname);
+            cfg.manager = Some(ManagerConfig {
+                recycling_method: RecyclingMethod::Fast,
+            });
+            
+            let pool = cfg.create_pool(Some(Runtime::Tokio1), NoTls)?;
+        
+            Ok(pool.get().await?)
+    
+        },
+        _ => panic!(".env ERROR")
+    }
+
 }

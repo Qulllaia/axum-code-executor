@@ -1,8 +1,8 @@
 mod types;
 use axum::{extract::{FromRequest, Path, Request, State}, response::IntoResponse, Error, Json};
-use deadpool_postgres::Object;
+use deadpool_postgres::{Manager, Object};
 use serde_json::json;
-use std::fs;
+use std::{fmt, fs, sync::Arc};
 use types::CreateCodeRequest;
 use std::path::Path as p;
 use std::fs::File as f;
@@ -11,7 +11,7 @@ use std::env;
 use std::io::{Write};
 use tokio::process::Command;
 
-use crate::router::AppState;
+use crate::controller::types::GetFilesResponse;
 
 static DIR_PATH: &'static str = "static";  
 #[derive(Debug)]
@@ -23,7 +23,6 @@ impl ExecuteController {
     }
 
     pub async fn execute_file(
-        State(state): State<AppState>,
         Path(id): Path<String>) -> Json<serde_json::Value> {
 
         let work_dir = p::new("static");
@@ -34,7 +33,7 @@ impl ExecuteController {
             .arg(format!("-o {}.exe", &id))
             .output()
             .await;
-        println!("{:?}", check_gcc);
+
          match check_gcc {
             Ok(compile_result) => {
                 if compile_result.stderr.len() > 0 {
@@ -53,8 +52,6 @@ impl ExecuteController {
                 }
             )),
         }
-
-        let _ = state.executor.execute("INSERT INTO \"Workspace\" (code) VALUES ($1)", &[&"code sample"]).await;
 
         let exec_output = Command::new("cmd")
             .current_dir(&work_dir)
@@ -81,11 +78,40 @@ impl ExecuteController {
     }
 
     pub async fn create_file(
+        State(state): State<Arc<Object>>,
         Json(file_data): Json<CreateCodeRequest>
     ) -> Json<serde_json::Value> {
 
+        let code = file_data.code.unwrap();
+
         let file_id: String = Uuid::new_v4().to_string() .replace('-', "");
-        let _ = Self::file_generator(file_data.code.unwrap(), &file_id).await;
+        
+        
+        match (*state).execute("INSERT INTO \"Workspace\" (workspace_uid, workspace_name, user_id, code) VALUES ($1, $2, $3, $4)", 
+                &[&file_id, &"work_space", &1_i64, &code]).await {
+            Ok(_) => {},
+            Err(error) => {
+                return Json(serde_json::json!(
+                    {
+                        "result":"error",
+                        "error":format!("{:?}", error),
+                    }
+                ));
+            }
+        };
+
+        match Self::file_generator(&code, &file_id).await {
+            Ok(_) => {},
+            Err(error) => {
+                return Json(serde_json::json!(
+                    {
+                        "result":"error",
+                        "error":format!("{:?}", error),
+                    }
+                ));
+            }
+        }
+
         return Json(serde_json::json!(
             {
                 "result":"done",
@@ -94,12 +120,27 @@ impl ExecuteController {
         ));
     }
 
-    pub async fn update_file(Json(file_data): Json<CreateCodeRequest>) -> Json<serde_json::Value> {
+    pub async fn update_file(
+        State(state): State<Arc<Object>>,
+        Json(file_data): Json<CreateCodeRequest>
+    ) -> Json<serde_json::Value> {
         let file_id: &String = &file_data.file_name.unwrap().replace('-', "");
+        let code = &file_data.code.unwrap();
         let searching_file_result = Self::check_if_file_exists(file_id).await;
+        match (*state).execute("update \"Workspace\" set code = $2 where workspace_uid = $1", &[&file_id, code]).await {
+            Ok(_) => {},
+            Err(error) => {
+                return Json(serde_json::json!(
+                    {
+                        "result":"error",
+                        "error":format!("{:?}", error),
+                    }
+                ));
+            }
+        };
         match searching_file_result {
             Ok(_) => {
-                let _ = Self::file_generator(file_data.code.unwrap(), &file_id.to_string()).await;
+                let _ = Self::file_generator(code, &file_id.to_string()).await;
                 return Json(serde_json::json!(
                 {
                     "result":"done",
@@ -115,7 +156,7 @@ impl ExecuteController {
         }
     }
 
-    async fn file_generator(code: String, uid: &String) -> Result<(), std::io::Error> {
+    async fn file_generator(code: &String, uid: &String) -> Result<(), std::io::Error> {
         let dir_path = DIR_PATH;
 
         if !p::new(dir_path).exists() {
@@ -140,6 +181,40 @@ impl ExecuteController {
             std::io::ErrorKind::NotFound,
             "File not found",
         ));
+
+    }
+
+    pub async fn get_files(
+        State(state): State<Arc<Object>>,
+        Path(user_id): Path<String>
+    ) -> Json<serde_json::Value>{
+
+        match (*state).query("SELECT * FROM \"Workspace\" WHERE user_id = $1", &[&user_id.parse::<i64>().unwrap()]).await {
+            Ok(rows) => {
+                let response: Vec<GetFilesResponse> = rows.iter().map(|row| {
+                    GetFilesResponse {
+                        workspace_uid: row.get("workspace_uid"),
+                        workspace_name: row.get("workspace_name"),
+                        user_id: row.get("user_id"),
+                        code: row.get("code"),
+                    }
+                }).collect();
+
+                return Json(serde_json::json!(
+                    {
+                        "row": response,
+                    }
+                ));
+            },
+            Err(error) => {
+                return Json(serde_json::json!(
+                    {
+                        "result":"error",
+                        "error":format!("{:?}", error),
+                    }
+                ));
+            }
+        }
 
     }
 }

@@ -6,3 +6,12 @@ pub struct CreateCodeRequest {
     pub code: Option<String>,
     pub file_name: Option<String>,
 }
+
+#[derive(Debug)]
+#[derive(serde::Serialize)]
+pub struct GetFilesResponse {
+    pub workspace_uid: String, 
+    pub workspace_name: String, 
+    pub user_id: i64, 
+    pub code: String,
+}
