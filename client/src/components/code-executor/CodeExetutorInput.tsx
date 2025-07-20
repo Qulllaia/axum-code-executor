@@ -5,14 +5,16 @@ import { cpp } from '@codemirror/lang-cpp';
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { Workspace } from '../../types/types';
+import { ParentForm } from '../forms/ParentForm';
 export const CodeExetutorInput = () => {
     const [text, setText] = useState('');
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [currentWorkspace, setCurrentWorkspace] = useState<number>(0);
     const [code, setCode] = useState('#include <stdio.h> int main() { printf("Hello World"); return 0; }');
-    const [workspace, setWorkspace] = useState<String[]>(['23a629528f0e4437', '490e2609752840']);
     const [userId, setUserId] = useState<number>(1);
-    const [workspaceList, setWorkspaceList] = useState< Workspace[]>([]);
+    const [workspaceList, setWorkspaceList] = useState<Workspace[]>([]);
+    const [isCreationDialogOpen, setIsCreationDialogOpen] = useState<boolean>(false);
+    const [workspaceNameInput, setWorkspaceNameInput] = useState('');
 
     const currentCode = workspaceList[currentWorkspace]?.code || '';
 
@@ -28,9 +30,12 @@ export const CodeExetutorInput = () => {
 
     const createWorkspace = async () => {
         await axios.post('http://127.0.1.1:5000/create_file', {
-            code: "#include <stdio.h> \n int main( { printf(\"Hello World33311\"); return 0; }"
+            workspace_name: workspaceNameInput,
+            code: "#include <stdio.h> \n int main() { printf(\"Hello World33311\"); return 0; }"
         });
         await fetchData();
+        setIsCreationDialogOpen(false);
+        setWorkspaceNameInput('');
     }
 
     const executeCode = async () => {
@@ -38,13 +43,13 @@ export const CodeExetutorInput = () => {
         setIsLoading(true);
         let response;
         let file;
-        if(!workspace){
+        if(!workspaceList){
             response = await axios.post('http://127.0.1.1:5000/create_file', {
                     code: currentCode    
                 }
             )
             file = response.data.file_name.toString();
-            setWorkspace([...workspace, file])
+            setWorkspaceList([...workspaceList, file])
         }else{
             response = await axios.patch('http://127.0.1.1:5000/update_file', {
                     file_name: workspaceList[currentWorkspace].workspace_uid,
@@ -53,7 +58,7 @@ export const CodeExetutorInput = () => {
             )
         }
 
-        if(response.request.status === 200 && workspace.length){
+        if(response.request.status === 200 && workspaceList.length){
             axios.get(`http://127.0.1.1:5000/execute_file/${workspaceList[currentWorkspace].workspace_uid}`)
             .then((exec_response) => {
                 const newText = exec_response.data.code_output;
@@ -86,7 +91,7 @@ export const CodeExetutorInput = () => {
         if(!workspaceList.length)
             fetchData();
 
-        for(let i = 0; i < workspace.length; i++) {
+        for(let i = 0; i < workspaceList.length; i++) {
             const element = document.getElementById(i.toString());
             if (element) {
                 element.style.boxShadow = 'inset 0 0 0 0 #1f1d238c';
@@ -99,7 +104,7 @@ export const CodeExetutorInput = () => {
             element.style.boxShadow = 'inset 200px 0 0 0 #494553';
         }
         setText('');
-    }, [currentWorkspace, workspace.length])
+    }, [currentWorkspace, workspaceList])
 
     useEffect(()=> {
         const element = document.getElementById('loader');
@@ -115,6 +120,21 @@ export const CodeExetutorInput = () => {
 
     return (
         <div className='container'>
+              <ParentForm
+                isOpen={isCreationDialogOpen}
+                setIsOpen={setIsCreationDialogOpen}
+              >
+                <div className='input-content'>
+                    <p>Type the name of Workspace</p>
+                    <input onChange={(e)=>{
+                        setWorkspaceNameInput(e.target.value);
+                    }}
+                    value={workspaceNameInput}
+                    ></input>
+                    <br/>
+                    <button onClick={createWorkspace}>Create Workspace</button>
+                </div>
+            </ParentForm>
             <div className='code-container'>
                 <div className='control-panel'>
                     <button className='execute-button'
@@ -156,7 +176,7 @@ export const CodeExetutorInput = () => {
                     <div className='control-panel'>
                         <div className='control-panel'>
                             <button className='create-button'
-                            onClick={createWorkspace}
+                            onClick={() => setIsCreationDialogOpen(true)}
                             > Create </button>
                         </div>
                     </div>

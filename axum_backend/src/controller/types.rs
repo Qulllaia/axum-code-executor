@@ -3,6 +3,7 @@ use serde::de::{Deserialize};
 #[derive(Debug)]
 #[derive(serde::Deserialize)]
 pub struct CreateCodeRequest {
+    pub workspace_name: Option<String>,
     pub code: Option<String>,
     pub file_name: Option<String>,
 }

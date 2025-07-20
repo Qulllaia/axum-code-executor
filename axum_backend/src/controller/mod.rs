@@ -130,11 +130,12 @@ impl ExecuteController {
     ) -> (StatusCode, Json<serde_json::Value>) {
 
         let code = file_data.code.unwrap();
+        let workspace_name = file_data.workspace_name.unwrap();
 
         let file_id: String = Uuid::new_v4().to_string() .replace('-', "");
         
         match (*state).execute("INSERT INTO \"Workspace\" (workspace_uid, workspace_name, user_id, code) VALUES ($1, $2, $3, $4)", 
-                &[&file_id, &"work_space", &1_i64, &code]).await {
+                &[&file_id, &workspace_name, &1_i64, &code]).await {
             Ok(_) => {},
             Err(error) => {
                 return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!(
