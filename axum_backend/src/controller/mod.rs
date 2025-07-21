@@ -61,8 +61,10 @@ impl ExecuteController {
             fs::remove_file(format!("./static/{uid}.c"))?;
         }
 
-        if p::new(&format!("./static/{uid}.exe")).exists() {
-            fs::remove_file(format!("./static/{uid}.exe"))?;
+        // Почему-то exe файлы создаются в формате " {название}"
+        // Пока не приоритет, потом починю 
+        if p::new(&format!("./static/ {uid}.exe")).exists() {
+            fs::remove_file(format!("./static/ {uid}.exe"))?;
         }
 
         Ok(())

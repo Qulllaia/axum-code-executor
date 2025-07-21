@@ -97,7 +97,7 @@ textarea {
 
 .execute-button, .create-button {
     height: 80%;
-    width: 8rem;
+    width: fit-content;
     outline: none;
     border-radius: 10px;
     margin: 10px;
