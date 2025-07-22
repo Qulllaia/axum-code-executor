@@ -1,8 +1,12 @@
 mod types;
 use axum::{extract::{FromRequest, Path, Request, State}, response::IntoResponse, Error, Json, http::StatusCode};
 use deadpool_postgres::{Manager, Object};
+use redis::{cmd, Commands, Connection, RedisError};
 use serde_json::json;
-use std::{fmt, fs, sync::Arc};
+use std::{fmt, fs, sync::{Arc}};
+
+use tokio::sync::Mutex;
+
 use types::CreateCodeRequest;
 use std::path::Path as p;
 use std::fs::File as f;
@@ -10,8 +14,8 @@ use uuid::Uuid;
 use std::env;
 use std::io::{Write};
 use tokio::process::Command;
-
-use crate::controller::types::GetFilesResponse;
+use redis::AsyncCommands;
+use crate::{controller::types::GetFilesResponse, Connections};
 
 static DIR_PATH: &'static str = "static";  
 #[derive(Debug)]
@@ -20,7 +24,7 @@ impl ExecuteController {
 
 
     pub async fn delete_file(
-        State(state): State<Arc<Object>>,
+        State(state): State<Arc<Mutex<Connections>>>,
         Path(id): Path<String>
     ) -> (StatusCode, Json<serde_json::Value>) {
 
@@ -36,7 +40,7 @@ impl ExecuteController {
             }
         }
 
-        match (*state).execute("DELETE FROM \"Workspace\" WHERE workspace_uid = $1", &[&id]).await {
+        match (*state).lock().await.database.execute("DELETE FROM \"Workspace\" WHERE workspace_uid = $1", &[&id]).await {
             Ok(_) => {},
             Err(error) => {
                 return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!(
@@ -71,11 +75,13 @@ impl ExecuteController {
     }
 
     pub async fn execute_file(
-        Path(id): Path<String>
+        State(connections): State<Arc<Mutex<Connections>>>,
+        Path(id): Path<String>,
     ) -> (StatusCode, Json<serde_json::Value>) {
 
         let work_dir = p::new("static");
-
+        let _: ()  = (*connections).lock().await.redis.set("key1", b"foo").await.unwrap();
+        
         let check_gcc = Command::new("gcc")
             .current_dir(&work_dir)
             .arg(format!("{}.c", &id))
@@ -127,7 +133,7 @@ impl ExecuteController {
     }
 
     pub async fn create_file(
-        State(state): State<Arc<Object>>,
+        State(state): State<Arc<Mutex<Connections>>>,
         Json(file_data): Json<CreateCodeRequest>
     ) -> (StatusCode, Json<serde_json::Value>) {
 
@@ -136,7 +142,7 @@ impl ExecuteController {
 
         let file_id: String = Uuid::new_v4().to_string() .replace('-', "");
         
-        match (*state).execute("INSERT INTO \"Workspace\" (workspace_uid, workspace_name, user_id, code) VALUES ($1, $2, $3, $4)", 
+        match (*state).lock().await.database.execute("INSERT INTO \"Workspace\" (workspace_uid, workspace_name, user_id, code) VALUES ($1, $2, $3, $4)", 
                 &[&file_id, &workspace_name, &1_i64, &code]).await {
             Ok(_) => {},
             Err(error) => {
@@ -170,13 +176,13 @@ impl ExecuteController {
     }
 
     pub async fn update_file(
-        State(state): State<Arc<Object>>,
+        State(state): State<Arc<Mutex<Connections>>>,
         Json(file_data): Json<CreateCodeRequest>
     ) -> (StatusCode, Json<serde_json::Value>) {
         let file_id: &String = &file_data.file_name.unwrap().replace('-', "");
         let code = &file_data.code.unwrap();
         let searching_file_result = Self::check_if_file_exists(file_id).await;
-        match (*state).execute("update \"Workspace\" set code = $2 where workspace_uid = $1", &[&file_id, code]).await {
+        match (*state).lock().await.database.execute("update \"Workspace\" set code = $2 where workspace_uid = $1", &[&file_id, code]).await {
             Ok(_) => {},
             Err(error) => {
                 return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!(
@@ -233,12 +239,13 @@ impl ExecuteController {
 
     }
 
+    // #[axum::debug_handler]
     pub async fn get_files(
-        State(state): State<Arc<Object>>,
+        State(state): State<Arc<Mutex<Connections>>>,
         Path(user_id): Path<String>
     ) -> (StatusCode, Json<serde_json::Value>) {
-
-        match (*state).query("SELECT * FROM \"Workspace\" WHERE user_id = $1", &[&user_id.parse::<i64>().unwrap()]).await {
+        let conn = state.lock().await;
+        match conn.database.query("SELECT * FROM \"Workspace\" WHERE user_id = $1", &[&user_id.parse::<i64>().unwrap()]).await {
             Ok(rows) => {
                 let response: Vec<GetFilesResponse> = rows.iter().map(|row| {
                     GetFilesResponse {

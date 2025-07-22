@@ -1,7 +1,13 @@
 mod router;
 mod controller;
 mod db;
-use std::sync::Arc;
+
+use std::cell::RefCell;
+use std::ops::DerefMut;
+use std::rc::Rc;
+use std::sync::{Arc};
+
+use tokio::sync::Mutex;
 
 use db::connector;
 use axum::{Router};
@@ -9,6 +15,13 @@ use axum::http::{Method, header, HeaderValue};
 use deadpool_postgres::{Manager, Object};
 use tower_http::cors::{CorsLayer};
 use crate::router::ExecuteRouter;
+
+use redis::aio::MultiplexedConnection;
+
+pub struct Connections {
+    pub database: Object,
+    pub redis: MultiplexedConnection 
+}
 
 #[tokio::main]
 async fn main() {
@@ -33,8 +46,25 @@ async fn main() {
         }
     }
 
-    let router: Router<Arc<Object>> = Router::new();
-    axum::serve(listener, ExecuteRouter::new(router, database_connection)
+    let redis_connection;
+    let redis_client = redis::Client::open("redis://127.0.0.1/");
+    match redis_client {
+        Ok(client)=>{
+            redis_connection = client.get_multiplexed_async_connection().await;
+        },
+        Err(redis_error) => {panic!("Redis Open Error {:?}", redis_error)},
+    }
+
+    let mut result_redis_connector;
+    match redis_connection {
+        Ok(connector )=>{ result_redis_connector = connector},
+        Err(redis_error) => {panic!("Redis Connection Error {:?}", redis_error)},
+    }
+
+    let router: Router<Arc<Mutex<Connections>>> = Router::new();
+
+    
+    axum::serve(listener, ExecuteRouter::new(router, Connections{database: database_connection, redis: result_redis_connector})
         .layer(cors)
         ).await.unwrap();
 }
