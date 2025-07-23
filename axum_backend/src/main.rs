@@ -1,5 +1,7 @@
 mod router;
 mod controller;
+mod cache;
+mod types;
 mod db;
 
 use std::cell::RefCell;

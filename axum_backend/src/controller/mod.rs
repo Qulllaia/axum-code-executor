@@ -1,21 +1,18 @@
-mod types;
-use axum::{extract::{FromRequest, Path, Request, State}, response::IntoResponse, Error, Json, http::StatusCode};
-use deadpool_postgres::{Manager, Object};
-use redis::{cmd, Commands, Connection, RedisError};
+use axum::{extract::{Path, State}, Json, http::StatusCode};
 use serde_json::json;
-use std::{fmt, fs, sync::{Arc}};
+use std::{fs, sync::{Arc}};
 
 use tokio::sync::Mutex;
 
-use types::CreateCodeRequest;
 use std::path::Path as p;
 use std::fs::File as f;
 use uuid::Uuid;
-use std::env;
 use std::io::{Write};
 use tokio::process::Command;
 use redis::AsyncCommands;
-use crate::{controller::types::GetFilesResponse, Connections};
+use crate::{cache, Connections};
+use crate::cache::Cache;
+use crate::types::{ GetFilesResponse, CreateCodeRequest, CacheData};
 
 static DIR_PATH: &'static str = "static";  
 #[derive(Debug)]
@@ -78,10 +75,47 @@ impl ExecuteController {
         State(connections): State<Arc<Mutex<Connections>>>,
         Path(id): Path<String>,
     ) -> (StatusCode, Json<serde_json::Value>) {
+        let mut connections = (*connections).lock().await;
+        let result = Cache::check_filed_existance(&mut connections, &id).await;
+        let mut database_code: String = String::new();
+        let query = connections.database.query("SELECT code FROM \"Workspace\" WHERE workspace_uid = $1", &[&id]).await;
+        match query {
+            Ok(rows) => {
+                let rows_data: Vec<String> = rows.iter().map(|row| {
+                    row.get("code")
+                }).collect();
+
+                    database_code = rows_data[0].clone();
+                    // println!("==== {:?}", database_code);
+                },
+            Err(error) => return (StatusCode::UNPROCESSABLE_ENTITY, Json(serde_json::json!(
+                {
+                    "result":"error",
+                    "error": error.to_string()
+                }
+            ))),
+        }
+
+        if result {
+            
+            let cache_code_data = Cache::get_data_by_field(&mut connections, &id).await; 
+            let cache_code = serde_json::from_str::<CacheData>(&cache_code_data).unwrap();
+
+            // println!("==== {:?}", database_code.len());
+
+            if database_code == cache_code.code {
+                return (StatusCode::OK, Json(serde_json::json!(
+                    {
+                        "result":"same",
+                        "code_output": cache_code.code_output, 
+                        "code_error": cache_code.code_error
+                    }
+                )));
+            }
+        }
 
         let work_dir = p::new("static");
-        let _: ()  = (*connections).lock().await.redis.set("key1", b"foo").await.unwrap();
-        
+
         let check_gcc = Command::new("gcc")
             .current_dir(&work_dir)
             .arg(format!("{}.c", &id))
@@ -116,13 +150,26 @@ impl ExecuteController {
             .await;
         
         match exec_output {
-            Ok(result) => return (StatusCode::OK, Json(serde_json::json!(
-                {
-                    "result": "done",
-                    "code_output": String::from_utf8_lossy(&result.stdout),
-                    "code_error": String::from_utf8_lossy(&result.stderr),
+            Ok(result) => {
+                // println!("{:?}", database_code.len());
+                if database_code.len() > 0 {
+                    let cache_code_data = CacheData {
+                        code: database_code.to_owned(),
+                        code_error: String::from_utf8_lossy(&result.stderr).to_string(),
+                        code_output: String::from_utf8_lossy(&result.stdout).to_string()
+                    };
+                    
+                    let _:() = Cache::set_data_by_field(&mut connections, &id, &serde_json::to_string(&cache_code_data).unwrap()).await;
                 }
-            ))),
+                
+                return (StatusCode::OK, Json(serde_json::json!(
+                    {
+                        "result": "done",
+                        "code_output": String::from_utf8_lossy(&result.stdout),
+                        "code_error": String::from_utf8_lossy(&result.stderr),
+                    }
+                )))
+            },
             Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!(
                 {
                     "result":"error",
@@ -130,6 +177,8 @@ impl ExecuteController {
                 }
             ))),
         }
+
+
     }
 
     pub async fn create_file(
@@ -179,10 +228,26 @@ impl ExecuteController {
         State(state): State<Arc<Mutex<Connections>>>,
         Json(file_data): Json<CreateCodeRequest>
     ) -> (StatusCode, Json<serde_json::Value>) {
+        let mut connections = (*state).lock().await;
+
         let file_id: &String = &file_data.file_name.unwrap().replace('-', "");
         let code = &file_data.code.unwrap();
+
+        let result = Cache::check_filed_existance(&mut connections, file_id).await;
+              
+        if result {
+            let redis_value: String  = Cache::get_data_by_field(&mut connections, file_id).await;
+            if code == &redis_value {
+                return (StatusCode::OK, Json(serde_json::json!(
+                    {
+                        "result":"done",
+                    }))
+                )
+            }
+        }
+        
         let searching_file_result = Self::check_if_file_exists(file_id).await;
-        match (*state).lock().await.database.execute("update \"Workspace\" set code = $2 where workspace_uid = $1", &[&file_id, code]).await {
+        match connections.database.execute("update \"Workspace\" set code = $2 where workspace_uid = $1", &[&file_id, code]).await {
             Ok(_) => {},
             Err(error) => {
                 return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!(
@@ -193,6 +258,7 @@ impl ExecuteController {
                 )));
             }
         };
+
         match searching_file_result {
             Ok(_) => {
                 let _ = Self::file_generator(code, &file_id.to_string()).await;

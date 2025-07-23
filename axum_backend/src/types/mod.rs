@@ -16,3 +16,10 @@ pub struct GetFilesResponse {
     pub user_id: i64, 
     pub code: String,
 }
+#[derive(Debug)]
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct CacheData {
+    pub code: String, 
+    pub code_output: String, 
+    pub code_error: String, 
+}
