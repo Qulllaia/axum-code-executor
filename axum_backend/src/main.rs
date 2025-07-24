@@ -3,6 +3,8 @@ mod controller;
 mod cache;
 mod types;
 mod db;
+mod auth_utils;
+mod middleware;
 
 use std::cell::RefCell;
 use std::ops::DerefMut;
@@ -16,10 +18,9 @@ use axum::{Router};
 use axum::http::{Method, header, HeaderValue};
 use deadpool_postgres::{Manager, Object};
 use tower_http::cors::{CorsLayer};
-use crate::router::ExecuteRouter;
-
+use crate::router::auth::AuthRouter;
+use crate::router::executor::ExecuteRouter;
 use redis::aio::MultiplexedConnection;
-
 pub struct Connections {
     pub database: Object,
     pub redis: MultiplexedConnection 
@@ -63,10 +64,12 @@ async fn main() {
         Err(redis_error) => {panic!("Redis Connection Error {:?}", redis_error)},
     }
 
-    let router: Router<Arc<Mutex<Connections>>> = Router::new();
+    let connections = Arc::new(Mutex::new(Connections{database: database_connection, redis: result_redis_connector}));
 
-    
-    axum::serve(listener, ExecuteRouter::new(router, Connections{database: database_connection, redis: result_redis_connector})
+    axum::serve(listener, 
+        Router::new()
+        .merge(ExecuteRouter::new(Router::new(), Arc::clone(&connections)))
+        .merge(AuthRouter::new(Router::new(), Arc::clone(&connections)))
         .layer(cors)
         ).await.unwrap();
 }

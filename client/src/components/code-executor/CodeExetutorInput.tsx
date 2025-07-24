@@ -6,15 +6,18 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { Workspace } from '../../types/types';
 import { ParentForm } from '../forms/ParentForm';
+import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
+
 export const CodeExetutorInput = () => {
     const [text, setText] = useState('');
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [currentWorkspace, setCurrentWorkspace] = useState<number>(0);
-    const [code, setCode] = useState('#include <stdio.h> int main() { printf("Hello World"); return 0; }');
     const [userId, setUserId] = useState<number>(1);
     const [workspaceList, setWorkspaceList] = useState<Workspace[]>([]);
     const [isCreationDialogOpen, setIsCreationDialogOpen] = useState<boolean>(false);
     const [workspaceNameInput, setWorkspaceNameInput] = useState('');
+
+    const [codeInput, setCodeInput] = useState('');
 
     const currentCode = workspaceList[currentWorkspace]?.code || '';
 
@@ -31,7 +34,7 @@ export const CodeExetutorInput = () => {
     const createWorkspace = async () => {
         await axios.post('http://127.0.1.1:5000/create_file', {
             workspace_name: workspaceNameInput,
-            code: "#include <stdio.h> \n int main() { printf(\"Hello World33311\"); return 0; }"
+            code: "#include <stdio.h>\nint main() {    \nprintf(\"Hello World33311\"); \nreturn 0; \n}"
         });
         await fetchData();
         setIsCreationDialogOpen(false);
@@ -59,11 +62,16 @@ export const CodeExetutorInput = () => {
         }
 
         if(response.request.status === 200 && workspaceList.length){
-            axios.get(`http://127.0.1.1:5000/execute_file/${workspaceList[currentWorkspace].workspace_uid}`)
+
+            axios.get(
+                codeInput === '' ? 
+                `http://127.0.1.1:5000/execute_file?id=${workspaceList[currentWorkspace].workspace_uid}` 
+                :
+                `http://127.0.1.1:5000/execute_file?id=${workspaceList[currentWorkspace].workspace_uid}&args=${codeInput.replace(/\n/g, '\\n')}`
+            )
             .then((exec_response) => {
                 const newText = exec_response.data.code_output;
-                setText(newText);
-                
+                setText(newText); 
             })
             .catch((exec_response) => {
                 console.log(exec_response.response);
@@ -121,6 +129,7 @@ export const CodeExetutorInput = () => {
     return (
         <div className='container'>
               <ParentForm
+                isDialog={true}
                 isOpen={isCreationDialogOpen}
                 setIsOpen={setIsCreationDialogOpen}
               >
@@ -164,11 +173,26 @@ export const CodeExetutorInput = () => {
                     }}
                     />
                 <div className='output-container'>
-                    <span className="loader" id='loader'></span>
-                    <textarea 
-                        value={text}
-                    >
-                    </textarea>
+                    <PanelGroup direction="horizontal">
+                        <Panel defaultSize={30} className='panel'>
+                            <span className="loader" id='loader'></span>
+                            <textarea 
+                                className='output-textarea'
+                                value={text}
+                            >
+                            </textarea>        
+                        </Panel>
+                        <PanelResizeHandle className='resize-handle' />
+                        <Panel className='panel'>
+                            <textarea
+                                className='input-textarea'
+                                placeholder='Input data...'
+                                value={codeInput}
+                                onChange={(e)=>setCodeInput(e.target.value)}
+                            >
+                            </textarea>
+                        </Panel>
+                    </PanelGroup>
                 </div>
             </div>
             <div className='work-spaces-container'>

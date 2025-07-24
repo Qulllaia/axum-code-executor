@@ -15,3 +15,6 @@ deadpool-postgres = "0.10"
 encoding = "0.2"
 dotenv = "0.15"
 uuid = { version = "1.17.0", features = [ "v4", ] }
+bcrypt = "0.17"
+jsonwebtoken = "9.3.1" 
+chrono = "0.4.41"  
