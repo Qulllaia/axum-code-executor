@@ -5,6 +5,7 @@ mod types;
 mod db;
 mod auth_utils;
 mod middleware;
+mod email_utils;
 
 use std::cell::RefCell;
 use std::ops::DerefMut;
@@ -31,8 +32,10 @@ async fn main() {
 
      let cors = CorsLayer::new()
         .allow_origin("http://localhost:3000".parse::<HeaderValue>().unwrap())
+        .allow_credentials(true)
         .allow_methods([Method::GET, Method::POST, Method::PATCH, Method::DELETE])
-        .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION]);
+        .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION, header::COOKIE])
+        .expose_headers([header::SET_COOKIE]);
 
 
     let addr = "127.0.1.1:5000";

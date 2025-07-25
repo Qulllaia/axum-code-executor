@@ -7,8 +7,12 @@ import axios from 'axios';
 import { Workspace } from '../../types/types';
 import { ParentForm } from '../forms/ParentForm';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
+import { error } from 'console';
+import { useNavigate } from 'react-router-dom';
 
 export const CodeExetutorInput = () => {
+    const navigate = useNavigate();
+    
     const [text, setText] = useState('');
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [currentWorkspace, setCurrentWorkspace] = useState<number>(0);
@@ -83,16 +87,21 @@ export const CodeExetutorInput = () => {
     }
 
     const fetchData = async () => {
-        const response = await axios.get(`http://127.0.1.1:5000/get_files/${userId}`)
-        const wl = response.data?.row.map((item: Workspace) => {
-            return {
-                code: item.code, 
-                user_id: item.user_id, 
-                workspace_name: item.workspace_name,
-                workspace_uid: item.workspace_uid,
-            } as Workspace
-        }) 
-        setWorkspaceList(wl);
+        await axios.get(`http://127.0.1.1:5000/get_files/${userId}`).then((response)=>{
+            const wl = response.data?.row.map((item: Workspace) => {
+                return {
+                    code: item.code, 
+                    user_id: item.user_id, 
+                    workspace_name: item.workspace_name,
+                    workspace_uid: item.workspace_uid,
+                } as Workspace
+            }) 
+            setWorkspaceList(wl);
+        }).catch((error)=>{
+            if(error.status === 401) {
+                navigate('/auth', { replace: true });
+            }
+        })
     } 
 
     useEffect(()=>{

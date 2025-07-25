@@ -19,7 +19,7 @@ impl AuthUtils {
 
     pub fn generate_token(user_id: &i64) -> Result<String, jsonwebtoken::errors::Error> {
         let expiration = Utc::now()
-            .checked_add_signed(Duration::hours(24))  // Срок жизни 24 часа
+            .checked_add_signed(Duration::hours(24)) 
             .expect("Invalid timestamp")
             .timestamp() as usize;
 

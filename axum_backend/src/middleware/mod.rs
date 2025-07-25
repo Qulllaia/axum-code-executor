@@ -1,22 +1,23 @@
 use axum::{extract::Request, http::StatusCode, middleware::Next, response::IntoResponse, Json};
+use axum_extra::{extract::CookieJar, headers::{authorization::Bearer, Authorization}, TypedHeader};
 use serde_json::json;
 
 use crate::auth_utils::AuthUtils;
 
 pub async fn auth_middleware(
+    jar: CookieJar,
     request: Request,
     next: Next,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    let token = request.headers()
-        .get("Authorization")
-        .and_then(|h| h.to_str().ok())
-        .and_then(|s| s.strip_prefix("Bearer "));
+    println!("{:?}", jar);
 
-    let token = token.ok_or_else(|| {
+    let token = jar.get("jwt_token").ok_or_else(|| {
         (StatusCode::UNAUTHORIZED, Json(json!({"error": "Missing token"})))
-    })?;
+    }).to_owned()?;
 
-    let claims = AuthUtils::validate_token(token).map_err(|_| {
+    println!("{:?}", token);
+    
+    let claims = AuthUtils::validate_token(token.value()).map_err(|_| {
         (StatusCode::UNAUTHORIZED, Json(json!({"error": "Invalid token"})))
     })?;
 

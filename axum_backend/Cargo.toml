@@ -18,3 +18,6 @@ uuid = { version = "1.17.0", features = [ "v4", ] }
 bcrypt = "0.17"
 jsonwebtoken = "9.3.1" 
 chrono = "0.4.41"  
+axum-extra = { version = "0.10.1",  features = ["cookie", "typed-header"] }
+time = "0.3"
+lettre = "0.11.17"
