@@ -9,6 +9,7 @@ import { ParentForm } from '../forms/ParentForm';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { error } from 'console';
 import { useNavigate } from 'react-router-dom';
+import { jwtDecode } from 'jwt-decode';
 
 export const CodeExetutorInput = () => {
     const navigate = useNavigate();
@@ -87,7 +88,7 @@ export const CodeExetutorInput = () => {
     }
 
     const fetchData = async () => {
-        await axios.get(`http://127.0.1.1:5000/get_files/${userId}`).then((response)=>{
+        await axios.get(`http://127.0.1.1:5000/get_files`).then((response)=>{
             const wl = response.data?.row.map((item: Workspace) => {
                 return {
                     code: item.code, 
@@ -103,10 +104,20 @@ export const CodeExetutorInput = () => {
             }
         })
     } 
+    const getCookie = (name: String) => {
+        console.log(document.cookie);
+        const cookies = document.cookie.split('; ');
+        const cookie = cookies.find(c => c.startsWith(`${name}=`));
+        return cookie ? cookie.split('=')[1] : '';
+    }
 
     useEffect(()=>{
-        if(!workspaceList.length)
+        if(!workspaceList.length){
+            console.log(getCookie("jwt_token"));
+            // console.log(jwtDecode(getCookie("jwt_token")));
+            // setUserId(Number(jwtDecode(getCookie("jwt_token"))!.sub));
             fetchData();
+        }
 
         for(let i = 0; i < workspaceList.length; i++) {
             const element = document.getElementById(i.toString());

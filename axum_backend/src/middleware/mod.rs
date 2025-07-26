@@ -9,13 +9,13 @@ pub async fn auth_middleware(
     request: Request,
     next: Next,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    println!("{:?}", jar);
+    // println!("{:?}", jar);
 
     let token = jar.get("jwt_token").ok_or_else(|| {
         (StatusCode::UNAUTHORIZED, Json(json!({"error": "Missing token"})))
     }).to_owned()?;
 
-    println!("{:?}", token);
+    // println!("{:?}", token);
     
     let claims = AuthUtils::validate_token(token.value()).map_err(|_| {
         (StatusCode::UNAUTHORIZED, Json(json!({"error": "Invalid token"})))

@@ -15,6 +15,7 @@
     "@uiw/codemirror-theme-andromeda": "^4.24.1",
     "@uiw/react-codemirror": "^4.24.1",
     "axios": "^1.10.0",
+    "jwt-decode": "^4.0.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-resizable-panels": "^3.0.3",

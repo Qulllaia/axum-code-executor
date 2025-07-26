@@ -16,7 +16,7 @@ impl ExecuteRouter {
 
     pub fn new(router: Router<Arc<Mutex<Connections>>>, connections:  Arc<Mutex<Connections>>) -> Router {
         return router
-            .route("/get_files/{user_id}", get(ExecuteController::get_files))
+            .route("/get_files", get(ExecuteController::get_files))
                 .route("/execute_file", get(ExecuteController::execute_file))
                     .route("/delete_file/{id}", delete(ExecuteController::delete_file))
                         .route("/create_file", post(ExecuteController::create_file))

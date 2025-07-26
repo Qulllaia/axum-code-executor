@@ -7,6 +7,7 @@ pub struct CreateCodeRequest {
     pub input: Option<String>,
     pub code: Option<String>,
     pub file_name: Option<String>,
+    pub user_id: Option<String>,
 }
 
 #[derive(serde::Deserialize)]

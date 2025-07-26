@@ -39,6 +39,8 @@ impl AuthController {
                     let token = AuthUtils::generate_token(&user_id).unwrap();
                     let cookie = Cookie::build(("jwt_token", token))
                                                 .http_only(true)
+                                                .same_site(SameSite::None)
+                                                .secure(true)
                                                 .path("/")
                                                 .build();
 
@@ -46,7 +48,8 @@ impl AuthController {
                     return Ok((
                             jar,
                             Json(serde_json::json!({
-                                "result":"done"
+                                "result":"done",
+                                "user_id": user_id,
                             }))
                     ));
                 } else {
@@ -77,7 +80,7 @@ impl AuthController {
         jar: CookieJar,
         State(connection): State<Arc<Mutex<Connections>>>,
         Json(user_data): Json<UserData>
-    ) -> Result<(CookieJar, Json<serde_json::Value>), (StatusCode, Json<serde_json::Value>)>  {
+    ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)>  {
         let email = user_data.email;
         let password:String;
 
@@ -100,10 +103,17 @@ impl AuthController {
                 
                 let user_id: i64 = result.get("user_id");
                 let token = AuthUtils::generate_token(&user_id).unwrap();
+
+                println!("{:?}", token);
+
                 let cookie = Cookie::build(("jwt_token", token))
                                             .http_only(true)
+                                            .same_site(SameSite::None)
+                                            .secure(true)
                                             .path("/")
                                             .build();
+
+                println!("{:?}", cookie.value());
 
                 let jar = jar.add(cookie);
                 let _ = EmailUtils::send_verification_email(&"znurock@mail.ru".to_string()).await.unwrap();
@@ -111,7 +121,8 @@ impl AuthController {
                 return Ok((
                         jar,
                         Json(serde_json::json!({
-                            "result":"done"
+                            "result":"done",
+                            "user_id": user_id,
                         }))
                 ));
             },

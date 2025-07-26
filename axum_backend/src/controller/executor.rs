@@ -1,6 +1,7 @@
 use axum::{extract::{Path, Query, State}, http::StatusCode, Json};
+use axum_extra::extract::{cookie::Cookie, CookieJar};
 use serde_json::json;
-use std::{fs, sync::{Arc}};
+use std::{collections::HashMap, fs, sync::Arc};
 
 use tokio::sync::Mutex;
 
@@ -10,7 +11,7 @@ use uuid::Uuid;
 use std::io::{Write};
 use tokio::process::Command;
 use redis::AsyncCommands;
-use crate::{cache, Connections};
+use crate::{auth_utils::AuthUtils, cache, Connections};
 use crate::cache::Cache;
 use crate::types::{ GetFilesResponse, CreateCodeRequest, CacheData, ExecuteParams};
 
@@ -191,9 +192,16 @@ impl ExecuteController {
     }
 
     pub async fn create_file(
+        jar: CookieJar,
         State(state): State<Arc<Mutex<Connections>>>,
         Json(file_data): Json<CreateCodeRequest>
     ) -> (StatusCode, Json<serde_json::Value>) {
+
+        let all_cookies = jar.iter().map(|c| (c.name(), c.value())).collect::<HashMap<&str, &str>>();
+
+        // println!("Все куки: {:?}", all_cookies);
+
+        let user_id = AuthUtils::validate_token(all_cookies["jwt_token"]).unwrap().sub;
 
         let code = file_data.code.unwrap();
         let workspace_name = file_data.workspace_name.unwrap();
@@ -201,7 +209,7 @@ impl ExecuteController {
         let file_id: String = Uuid::new_v4().to_string() .replace('-', "");
         
         match (*state).lock().await.database.execute("INSERT INTO \"Workspace\" (workspace_uid, workspace_name, user_id, code) VALUES ($1, $2, $3, $4)", 
-                &[&file_id, &workspace_name, &1_i64, &code]).await {
+                &[&file_id, &workspace_name, &user_id, &code]).await {
             Ok(_) => {},
             Err(error) => {
                 return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!(
@@ -316,11 +324,16 @@ impl ExecuteController {
 
     // #[axum::debug_handler]
     pub async fn get_files(
+        jar: CookieJar,
         State(state): State<Arc<Mutex<Connections>>>,
-        Path(user_id): Path<String>
     ) -> (StatusCode, Json<serde_json::Value>) {
+        
+        let all_cookies = jar.iter().map(|c| (c.name(), c.value())).collect::<HashMap<&str, &str>>();
+
+        let user_id = AuthUtils::validate_token(all_cookies["jwt_token"]).unwrap().sub;
+
         let conn = state.lock().await;
-        match conn.database.query("SELECT * FROM \"Workspace\" WHERE user_id = $1", &[&user_id.parse::<i64>().unwrap()]).await {
+        match conn.database.query("SELECT * FROM \"Workspace\" WHERE user_id = $1", &[&user_id]).await {
             Ok(rows) => {
                 let response: Vec<GetFilesResponse> = rows.iter().map(|row| {
                     GetFilesResponse {

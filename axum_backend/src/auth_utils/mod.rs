@@ -30,6 +30,8 @@ impl AuthUtils {
             exp: expiration,
         };
 
+        // println!("{:?}", user_id.to_owned());
+
         return encode(
             &Header::default(),
             &claims,
