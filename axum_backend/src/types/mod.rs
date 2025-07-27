@@ -51,3 +51,13 @@ pub struct Claims {
 pub struct AuthBody {
     pub access_token: String,
 }
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct VerifyToken {
+    pub verify_token: String,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct UserCredentialsUntilVerify {
+    pub email: String,
+    pub password: String,
+}

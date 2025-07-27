@@ -6,12 +6,14 @@ mod db;
 mod auth_utils;
 mod middleware;
 mod email_utils;
+mod rabbitmq;
 
 use std::cell::RefCell;
 use std::ops::DerefMut;
 use std::rc::Rc;
 use std::sync::{Arc};
 
+use lapin::{Channel, Connection, ConnectionProperties};
 use tokio::sync::Mutex;
 
 use db::connector;
@@ -22,9 +24,12 @@ use tower_http::cors::{CorsLayer};
 use crate::router::auth::AuthRouter;
 use crate::router::executor::ExecuteRouter;
 use redis::aio::MultiplexedConnection;
+use rabbitmq::email_consumer::EmailConsumer;
+
 pub struct Connections {
     pub database: Object,
-    pub redis: MultiplexedConnection 
+    pub redis: MultiplexedConnection,
+    pub rabbitmq_channel: Channel
 }
 
 #[tokio::main]
@@ -67,7 +72,15 @@ async fn main() {
         Err(redis_error) => {panic!("Redis Connection Error {:?}", redis_error)},
     }
 
-    let connections = Arc::new(Mutex::new(Connections{database: database_connection, redis: result_redis_connector}));
+    let rabbitmq_connection = Connection::connect(
+        "amqp://guest:guest@localhost:5672",
+        ConnectionProperties::default(),
+    )
+    .await
+    .expect("Failed to connect to RabbitMQ");
+    let rabbitmq_channel = rabbitmq_connection.create_channel().await.expect("Failed to create channel");
+
+    let connections = Arc::new(Mutex::new(Connections{database: database_connection, redis: result_redis_connector, rabbitmq_channel: rabbitmq_channel}));
 
     axum::serve(listener, 
         Router::new()

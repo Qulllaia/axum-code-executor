@@ -1,13 +1,18 @@
 use std::{result, sync::Arc, task::Context};
 
+use axum::extract::Query;
 use axum::response::IntoResponse;
 use axum::{body::Body, extract::State, http::StatusCode, Json};
 use axum_extra::extract::cookie::{self, SameSite};
 use bcrypt::{hash, verify, DEFAULT_COST};
+use lapin::options::{BasicAckOptions, BasicConsumeOptions, BasicNackOptions, BasicPublishOptions, QueueDeclareOptions};
+use lapin::types::FieldTable;
+use lapin::BasicProperties;
 use redis::Connection;
 use tokio::sync::Mutex;
-use tokio::time;
+use tokio::time::{self, sleep, Duration};
 use crate::email_utils::EmailUtils;
+use crate::types::VerifyToken;
 use crate::{auth_utils::AuthUtils, types::AuthBody};
 use crate::{types::UserData, Connections};
 use axum_extra::{
@@ -15,6 +20,7 @@ use axum_extra::{
     headers::authorization::{Authorization, Bearer},
     extract::cookie::{CookieJar, Cookie},
 };
+use futures_lite::stream::StreamExt;
 
 pub struct AuthController;
 
@@ -136,5 +142,88 @@ impl AuthController {
                 ))
             },
         }
+    }
+
+    pub async fn email_verify(
+        State(connection): State<Arc<Mutex<Connections>>>,
+        Query(verify_token): Query<VerifyToken>
+    ) -> Json<serde_json::Value> {
+        println!("{:?}", "email_verify");
+        tokio::spawn(async move {
+            let connection = connection.lock().await;
+
+            let q_name = format!("verification_email {}", verify_token.verify_token);
+
+            connection.rabbitmq_channel.basic_publish("", 
+                q_name.as_str(), 
+                BasicPublishOptions::default(), 
+                &serde_json::to_vec(&verify_token).unwrap(),
+             BasicProperties::default())
+                        .await.expect("channel publishing failed");
+        });
+        return Json(serde_json::json!({
+            "result": "matched"
+        }))
+    }
+
+    pub async fn email_ping_verify(
+        State(connection): State<Arc<Mutex<Connections>>>,
+        Query(verify_token): Query<VerifyToken>
+    ) -> Json<serde_json::Value> {
+        let connection = connection.lock().await;
+        println!("{:?}", "email_ping");
+
+        let q_name = format!("verification_email {}", verify_token.verify_token);
+        connection.rabbitmq_channel.queue_declare(
+            q_name.as_str(), 
+            QueueDeclareOptions::default(), 
+            FieldTable::default())
+            .await
+            .expect("Queue crate failed");
+
+        let mut consumer = connection.rabbitmq_channel.basic_consume(
+            q_name.as_str(), 
+            "verification_consumer", 
+            BasicConsumeOptions::default(), 
+            FieldTable::default())
+            .await
+            .expect("Consumer creation failed");
+
+        let delivery = tokio::time::timeout(
+            std::time::Duration::from_secs(20), 
+            tokio::spawn( async move {
+                while let Some(delivery) = consumer.next().await {
+                    match delivery {
+                        Ok(delivery) => {
+                            println!("{:?}", delivery);
+                            let data:VerifyToken = serde_json::from_slice(&delivery.data).expect("Failed to convert into verify");
+                            if data.verify_token == verify_token.verify_token {
+                                delivery.ack(BasicAckOptions::default())
+                                    .await
+                                .expect("Failed to ack message");
+                            return Ok(true);
+                        } else {
+                            delivery.nack(BasicNackOptions { 
+                                        multiple: false, 
+                                        requeue: true })
+                                        .await
+                                        .expect("Failed to ack message");
+                                    continue;
+                                }
+                                
+                            },
+                            Err(e) => {
+                                eprintln!("Error receiving message: {}", e);
+                                return Err(false);
+                            }
+                    }
+                }
+                Err(false)
+             })
+        ).await;
+        return Json(serde_json::json!({
+            "result": format!("{:?}", delivery) 
+        }))
+
     }
 }
