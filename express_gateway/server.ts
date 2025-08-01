@@ -7,7 +7,7 @@ const amqplib = require('amqplib/callback_api');
 const queue = 'verification_email'
 
 
-function sendRabbitMQmessage(message: String){
+function sendRabbitMQmessage(message: String) {
     amqplib.connect('amqp://guest:guest@localhost:5672', (err: any, conn: any) => {
     if (err) throw err;   
     
@@ -22,11 +22,11 @@ function sendRabbitMQmessage(message: String){
                 { persistent: true }
             );
             if (!sent) {
-                console.error('Сообщение не было отправлено в очередь');
+                return "Couldnt create message"
             }
             return sent;
         }catch(e) {   
-            console.log(e)
+            return e;
         }
       });
     
@@ -38,13 +38,13 @@ app.get('/verify', (req, res)=> {
     console.log(verifyToken);
     if(verifyToken){
         const message = JSON.stringify({ verify_token: verifyToken?.toString() });
-        const ers = sendRabbitMQmessage(message)
-        res.json({
-            "result": ers
+        const rmqResponse = sendRabbitMQmessage(message)
+        res.status(200).json({
+            "result": rmqResponse
         })
     }else {
-        res.json({
-            "result": "matched1"
+        res.status(400).json({
+            "result": "No Token"
         })
     }
 })

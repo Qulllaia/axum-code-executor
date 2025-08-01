@@ -33,7 +33,7 @@ pub struct CacheData {
     pub input: String,
 }
 
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, serde::Serialize)]
 pub struct UserData {
     pub email: String, 
     pub password: String,
