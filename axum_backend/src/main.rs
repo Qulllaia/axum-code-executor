@@ -29,7 +29,8 @@ use rabbitmq::email_consumer::EmailConsumer;
 pub struct Connections {
     pub database: Object,
     pub redis: MultiplexedConnection,
-    pub rabbitmq_channel: Channel
+    pub rabbitmq_channel_consumer: Channel,
+    pub rabbitmq_channel_producer: Channel,
 }
 
 #[tokio::main]
@@ -78,9 +79,18 @@ async fn main() {
     )
     .await
     .expect("Failed to connect to RabbitMQ");
-    let rabbitmq_channel = rabbitmq_connection.create_channel().await.expect("Failed to create channel");
 
-    let connections = Arc::new(Mutex::new(Connections{database: database_connection, redis: result_redis_connector, rabbitmq_channel: rabbitmq_channel}));
+    let rabbitmq_channel_consumer = rabbitmq_connection.create_channel().await.expect("Failed to create channel");
+    let rabbitmq_channel_producer = rabbitmq_connection.create_channel().await.expect("Failed to create channel");
+
+
+    let connections = Arc::new(Mutex::new(
+        Connections{
+            database: database_connection, 
+            redis: result_redis_connector, 
+            rabbitmq_channel_consumer: rabbitmq_channel_consumer,
+            rabbitmq_channel_producer: rabbitmq_channel_producer
+        }));
 
     axum::serve(listener, 
         Router::new()

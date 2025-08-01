@@ -5,11 +5,10 @@ use axum::response::IntoResponse;
 use axum::{body::Body, extract::State, http::StatusCode, Json};
 use axum_extra::extract::cookie::{self, SameSite};
 use bcrypt::{hash, verify, DEFAULT_COST};
-use lapin::options::{BasicAckOptions, BasicConsumeOptions, BasicNackOptions, BasicPublishOptions, QueueDeclareOptions};
+use lapin::options::{BasicAckOptions, BasicConsumeOptions, BasicNackOptions, BasicPublishOptions, QueueDeclareOptions, QueueDeleteOptions};
 use lapin::types::FieldTable;
-use lapin::BasicProperties;
-use redis::Connection;
-use tokio::sync::Mutex;
+use lapin::{BasicProperties, Connection, ConnectionProperties};
+use tokio::sync::{oneshot, Mutex};
 use tokio::time::{self, sleep, Duration};
 use crate::email_utils::EmailUtils;
 use crate::types::VerifyToken;
@@ -149,18 +148,37 @@ impl AuthController {
         Query(verify_token): Query<VerifyToken>
     ) -> Json<serde_json::Value> {
         println!("{:?}", "email_verify");
-        tokio::spawn(async move {
             let connection = connection.lock().await;
+            let rabbitmq_connection = Connection::connect(
+                "amqp://guest:guest@localhost:5672",
+                ConnectionProperties::default(),
+            )
+            .await
+            .expect("Failed to connect to RabbitMQ");
 
-            let q_name = format!("verification_email {}", verify_token.verify_token);
 
-            connection.rabbitmq_channel.basic_publish("", 
-                q_name.as_str(), 
+            let rabbitmq_channel_producer = rabbitmq_connection.create_channel().await.expect("Failed to create channel");
+
+            let q_name = format!("verification_email");
+
+            rabbitmq_channel_producer.queue_declare(
+            q_name.as_str(), 
+            QueueDeclareOptions {
+                        durable: true,
+                        auto_delete: false,
+                        ..Default::default()
+                    }, 
+            FieldTable::default())
+            .await
+            .expect("Queue crate failed");
+
+
+            connection.rabbitmq_channel_producer.basic_publish("", 
+            q_name.as_str(), 
                 BasicPublishOptions::default(), 
                 &serde_json::to_vec(&verify_token).unwrap(),
              BasicProperties::default())
                         .await.expect("channel publishing failed");
-        });
         return Json(serde_json::json!({
             "result": "matched"
         }))
@@ -171,17 +189,22 @@ impl AuthController {
         Query(verify_token): Query<VerifyToken>
     ) -> Json<serde_json::Value> {
         let connection = connection.lock().await;
+        let _ = connection.rabbitmq_channel_consumer.queue_delete("verification_email", QueueDeleteOptions::default()).await;
         println!("{:?}", "email_ping");
 
-        let q_name = format!("verification_email {}", verify_token.verify_token);
-        connection.rabbitmq_channel.queue_declare(
+        let q_name = format!("verification_email");
+        connection.rabbitmq_channel_consumer.queue_declare(
             q_name.as_str(), 
-            QueueDeclareOptions::default(), 
+            QueueDeclareOptions {
+                        durable: true,
+                        auto_delete: false,
+                        ..Default::default()
+                    }, 
             FieldTable::default())
             .await
             .expect("Queue crate failed");
 
-        let mut consumer = connection.rabbitmq_channel.basic_consume(
+        let mut consumer = connection.rabbitmq_channel_consumer.basic_consume(
             q_name.as_str(), 
             "verification_consumer", 
             BasicConsumeOptions::default(), 
@@ -189,40 +212,49 @@ impl AuthController {
             .await
             .expect("Consumer creation failed");
 
-        let delivery = tokio::time::timeout(
-            std::time::Duration::from_secs(20), 
-            tokio::spawn( async move {
+        
+        let timeout_task = tokio::time::timeout(
+            std::time::Duration::from_secs(20),
+            tokio::spawn(async move {
+                let mut result = false;
+                
                 while let Some(delivery) = consumer.next().await {
+                    println!("sfsfsdfs");
                     match delivery {
                         Ok(delivery) => {
-                            println!("{:?}", delivery);
-                            let data:VerifyToken = serde_json::from_slice(&delivery.data).expect("Failed to convert into verify");
+                            let data: VerifyToken = serde_json::from_slice(&delivery.data)
+                                .expect("Failed to parse message");
+                            
                             if data.verify_token == verify_token.verify_token {
                                 delivery.ack(BasicAckOptions::default())
                                     .await
-                                .expect("Failed to ack message");
-                            return Ok(true);
-                        } else {
-                            delivery.nack(BasicNackOptions { 
-                                        multiple: false, 
-                                        requeue: true })
-                                        .await
-                                        .expect("Failed to ack message");
-                                    continue;
-                                }
-                                
-                            },
-                            Err(e) => {
-                                eprintln!("Error receiving message: {}", e);
-                                return Err(false);
+                                    .expect("Failed to ack message");
+                                result = true;
+                                println!("Finded");
+                                break;
+                            } else {
+                                delivery.nack(BasicNackOptions {
+                                    multiple: false,
+                                    requeue: true
+                                })
+                                .await
+                                .expect("Failed to nack message");
                             }
+                        },
+                        Err(e) => {
+                            eprintln!("Error receiving message: {}", e);
+                            break;
+                        }
                     }
                 }
-                Err(false)
-             })
-        ).await;
+                
+                // let _ = tx.send(result);
+            })
+        );
+        // let _ = timeout_task.await;
+        
         return Json(serde_json::json!({
-            "result": format!("{:?}", delivery) 
+            "result": format!("{:?}", timeout_task.await) 
         }))
 
     }
