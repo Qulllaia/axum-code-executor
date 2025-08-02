@@ -8,9 +8,6 @@ mod middleware;
 mod email_utils;
 mod rabbitmq;
 
-use std::cell::RefCell;
-use std::ops::DerefMut;
-use std::rc::Rc;
 use std::sync::{Arc};
 
 use lapin::{Channel, Connection, ConnectionProperties};
@@ -19,12 +16,11 @@ use tokio::sync::Mutex;
 use db::connector;
 use axum::{Router};
 use axum::http::{Method, header, HeaderValue};
-use deadpool_postgres::{Manager, Object};
+use deadpool_postgres::Object;
 use tower_http::cors::{CorsLayer};
 use crate::router::auth::AuthRouter;
 use crate::router::executor::ExecuteRouter;
 use redis::aio::MultiplexedConnection;
-use rabbitmq::email_consumer::EmailConsumer;
 
 pub struct Connections {
     pub database: Object,

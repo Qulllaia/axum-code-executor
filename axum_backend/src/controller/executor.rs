@@ -1,6 +1,5 @@
 use axum::{extract::{Path, Query, State}, http::StatusCode, Json};
-use axum_extra::extract::{cookie::Cookie, CookieJar};
-use serde_json::json;
+use axum_extra::extract::CookieJar;
 use std::{collections::HashMap, fs, sync::Arc};
 
 use tokio::sync::Mutex;
@@ -10,8 +9,7 @@ use std::fs::File as f;
 use uuid::Uuid;
 use std::io::{Write};
 use tokio::process::Command;
-use redis::AsyncCommands;
-use crate::{auth_utils::AuthUtils, cache, Connections};
+use crate::{auth_utils::AuthUtils, Connections};
 use crate::cache::Cache;
 use crate::types::{ GetFilesResponse, CreateCodeRequest, CacheData, ExecuteParams};
 

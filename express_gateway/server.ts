@@ -35,7 +35,6 @@ function sendRabbitMQmessage(message: String) {
 
 app.get('/verify', (req, res)=> {
     const verifyToken = req.query.verify_token;
-    console.log(verifyToken);
     if(verifyToken){
         const message = JSON.stringify({ verify_token: verifyToken?.toString() });
         const rmqResponse = sendRabbitMQmessage(message)

@@ -5,7 +5,7 @@ use lettre::{transport::smtp::authentication::Credentials, Message, SmtpTranspor
 
 pub struct EmailUtils;
 impl EmailUtils {
-    pub async fn send_verification_email(email: &String) -> Result<(), Box<dyn std::error::Error>> { 
+    pub async fn send_verification_email(email: &String, token: &String,) -> Result<(), Box<dyn std::error::Error>> { 
         dotenv().ok();
         
         let creds = Credentials::new(
@@ -13,7 +13,7 @@ impl EmailUtils {
             env::var("EMAIL_PASSWORD").unwrap().to_string()
         );
 
-        let verification_link = format!("https://localhost:3000/verify?token={}", "to31313131ken");
+        let verification_link = format!("http://localhost:5000/verify?verify_token={}", token);
         let email = Message::builder()
         .from(env::var("EMAIL_LOGIN").unwrap().to_string().parse()?)
         .to(email.parse()?)
@@ -31,4 +31,5 @@ impl EmailUtils {
         mailer.send(&email.unwrap())?;
         Ok(())
     }
+
 }
